@@ -230,7 +230,7 @@ function createServer(options: ServerOptions = {}) {
     }
     // Fallback: lookup by title for prompts without stored slug
     // Uses indexed DB query instead of loading 500 rows into memory
-    // TODO: Backfill slug column for all existing prompts so this fallback can be removed
+    // Run `npm run db:backfill-slugs` to populate the slug column for all existing prompts and remove this fallback.
     if (!prompt) {
       const titleGuess = promptSlug.replace(/-/g, " ");
       prompt = await db.prompt.findFirst({
