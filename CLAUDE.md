@@ -12,6 +12,7 @@ For detailed agent guidelines, see [AGENTS.md](AGENTS.md).
 
 | Layer | Technology |
 |-------|-----------|
+| Runtime | Node.js 24.x |
 | Framework | Next.js 16 (App Router) + React 19 |
 | Language | TypeScript 5 (strict mode) |
 | Database | PostgreSQL + Prisma ORM 6.19 |
@@ -44,6 +45,7 @@ npm run db:studio        # Open Prisma Studio
 npm run db:seed          # Seed database with initial data
 npm run db:setup         # Full setup: generate + migrate + seed
 npm run db:resetadmin    # Reset admin user credentials
+npm run db:backfill-slugs # Backfill slug values for existing records
 
 # Type checking
 npx tsc --noEmit         # Check TypeScript types
@@ -116,11 +118,13 @@ npm run book:pdf:all     # Generate all PDFs
     │   └── ...             # about, brand, docs, privacy, terms, etc.
     ├── components/
     │   ├── admin/          # Admin UI
+    │   ├── ads/            # Ad components (Ezoic, Google AdSense)
+    │   ├── api/            # API documentation components
     │   ├── auth/           # Auth forms/gates
     │   ├── book/           # Book reader components
     │   ├── categories/     # Category components
     │   ├── comments/       # Comment threads
-    │   ├── developers/     # API docs components
+    │   ├── developers/     # Developer/API docs
     │   ├── ide/            # IDE integration components
     │   ├── kids/           # Kids mode components
     │   ├── layout/         # Header, footer, navigation
@@ -139,16 +143,21 @@ npm run book:pdf:all     # Generate all PDFs
         ├── config/         # Config type definitions
         ├── hooks/          # Custom React hooks
         ├── i18n/           # i18n utilities
+        ├── kids/           # Kids-safe mode utilities
         ├── plugins/        # Plugin system
         │   ├── auth/       # credentials, github, google, azure, apple
         │   ├── storage/    # url, s3, do-spaces
         │   ├── media-generators/ # fal.ai, wiro.ai
         │   └── widgets/    # Embeddable widgets
+        ├── analytics.ts    # Analytics integration
         ├── db.ts           # Prisma client singleton
         ├── rate-limit.ts   # Rate limiting utility
+        ├── skill-files.ts  # Skill file handling
         ├── slug.ts         # Slug generation
         ├── urls.ts         # URL helpers
-        └── utils.ts        # cn() and misc utilities
+        ├── utils.ts        # cn() and misc utilities
+        ├── variable-detection.ts # Prompt variable detection
+        └── webhook.ts      # Outbound webhook delivery
 ```
 
 ## API Routes (`src/app/api/`)
@@ -172,6 +181,7 @@ npm run book:pdf:all     # Generate all PDFs
 | `media-generate` | AI media generation (images/video) |
 | `user` / `users` | User profile operations |
 | `admin/*` | Admin-only operations |
+| `leaderboard` | Leaderboard data |
 | `health` | Health check |
 | `cron` | Scheduled jobs (credit reset) |
 | `config` | Runtime config endpoint |
@@ -197,6 +207,8 @@ Key models in `prisma/schema.prisma`:
 - **UserPromptExample** — media examples submitted by users
 - **WebhookConfig** — outbound webhooks (PROMPT_CREATED/UPDATED/DELETED)
 - **CategorySubscription** — user subscriptions to categories
+
+Key enums: `UserRole` (ADMIN/USER), `PromptType` (TEXT/IMAGE/VIDEO/AUDIO/STRUCTURED/SKILL/TASTE), `ChangeRequestStatus` (PENDING/APPROVED/REJECTED), `ReportReason`/`ReportStatus`, `WebhookEvent`, `DelistReason` (TOO_SHORT/NOT_ENGLISH/LOW_QUALITY/NOT_LLM_INSTRUCTION/MANUAL/UNUSUAL_ACTIVITY)
 
 ## Configuration (`prompts.config.ts`)
 
@@ -308,6 +320,11 @@ GOOGLE_ANALYTICS_ID=
 GOOGLE_ADSENSE_ACCOUNT=
 NEXT_PUBLIC_EZOIC_ENABLED=
 EZOIC_SITE_DOMAIN=
+```
+
+Logging (optional):
+```
+LOG_LEVEL=              # Options: trace, debug, info, warn, error, fatal (default: info)
 ```
 
 ## Internationalization
