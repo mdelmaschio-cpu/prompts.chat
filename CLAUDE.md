@@ -51,17 +51,28 @@ npm run db:backfill-slugs # Backfill slug values for existing records
 npx tsc --noEmit         # Check TypeScript types
 
 # Testing
-npm test                 # Run all tests (vitest)
+npm test                 # Run all tests (vitest run)
 npm run test:watch       # Watch mode
 npm run test:ui          # Vitest UI
 npm run test:coverage    # Coverage report
 
 # Translations
-node scripts/check-translations.js  # Check missing translations across locales
+node scripts/check-translations.js     # Check missing translations across locales
+node scripts/find-unused-translations.js # Find unused translation keys
+
+# Content generation / data utilities
+npx tsx scripts/generate-examples.ts   # Generate AI example media for prompts (npm run generate:examples)
+npx tsx scripts/seed-skills.ts         # Seed Skill-type prompts
 
 # Book/PDF
-npm run book:pdf         # Generate book PDF
-npm run book:pdf:all     # Generate all PDFs
+npm run book:pdf         # Generate book HTML
+npm run book:pdf:all     # Generate all book HTML variants
+npm run book:pdf:convert # Convert generated HTML to PDF
+npm run book:pdf:print   # Generate + convert print edition
+npm run book:pdf:print:all # Generate + convert all print editions
+
+# Docs linting
+node scripts/lint-mdx.js # Lint MDX content under src/app/book, docs, etc.
 ```
 
 ## Key Files
@@ -84,15 +95,17 @@ npm run book:pdf:all     # Generate all PDFs
 ├── prisma/
 │   ├── schema.prisma       # Database schema
 │   ├── migrations/         # Migration history
-│   └── seed.ts             # Seed script
-├── messages/               # i18n files: en, tr, es, zh, ja, ar, pt, fr, de, it, nl, ko, ru, he, el, az, fa
+│   ├── seed.ts             # Seed script
+│   └── reset-admin.ts      # Admin credential reset script
+├── messages/               # i18n files: en, tr, es, zh, ja, ar, pt, fr, de, it, nl, ko, ru, he, el, az, fa (17 locales)
 ├── public/                 # Static assets (logos, favicons, sponsors)
 ├── plugins/
 │   └── claude/prompts.chat/  # Claude Code plugin (commands, agents, skills)
 ├── packages/
 │   ├── prompts.chat/       # npm SDK package
 │   └── raycast-extension/  # Raycast extension
-├── scripts/                # Dev/build utilities
+├── scripts/                # Dev/build/content utilities (setup, docker-setup, translations, book PDF, slug backfill, etc.)
+├── .github/workflows/      # CI (lint + test), Docker publish, credit reset cron, spam check, contributors sync
 └── src/
     ├── app/                # Next.js App Router
     │   ├── (auth)/         # Login, register
@@ -100,22 +113,27 @@ npm run book:pdf:all     # Generate all PDFs
     │   ├── admin/          # Admin dashboard
     │   ├── api/            # API routes (see below)
     │   ├── book/           # Book/guide pages (MDX)
+    │   ├── brand/          # Brand/press kit page
     │   ├── builder/        # Prompt builder UI
     │   ├── categories/     # Category browsing
     │   ├── collection/     # User collections
     │   ├── developers/     # Developer/API docs
     │   ├── discover/       # Prompt discovery
+    │   ├── docs/           # Product documentation
     │   ├── embed/          # Embeddable prompt widget
     │   ├── feed/           # Personal feed
+    │   ├── how_to_write_effective_prompts/ # Prompting guide page
     │   ├── kids/           # Kids-safe prompt section
     │   ├── presentation/   # Presentation mode
+    │   ├── promptmasters/  # Promptmasters feature
     │   ├── prompts/        # Prompt CRUD
     │   ├── settings/       # User settings
     │   ├── skills/         # Skills browsing
+    │   ├── support/        # Support page
     │   ├── tags/           # Tag browsing
     │   ├── taste/          # Taste/preference section
     │   ├── workflows/      # Workflow (chained prompts)
-    │   └── ...             # about, brand, docs, privacy, terms, etc.
+    │   └── ...             # about, privacy, terms, sitemap.ts, robots.ts, etc.
     ├── components/
     │   ├── admin/          # Admin UI
     │   ├── ads/            # Ad components (Ezoic, Google AdSense)
@@ -140,7 +158,8 @@ npm run book:pdf:all     # Generate all PDFs
     └── lib/
         ├── ai/             # OpenAI integration (embeddings, generation, quality-check)
         ├── auth/           # NextAuth config
-        ├── config/         # Config type definitions
+        ├── book/           # Book chapter data (chapters.ts)
+        ├── config/         # defineConfig() + config type definitions
         ├── hooks/          # Custom React hooks
         ├── i18n/           # i18n utilities
         ├── kids/           # Kids-safe mode utilities
@@ -148,17 +167,27 @@ npm run book:pdf:all     # Generate all PDFs
         │   ├── auth/       # credentials, github, google, azure, apple
         │   ├── storage/    # url, s3, do-spaces
         │   ├── media-generators/ # fal.ai, wiro.ai
-        │   └── widgets/    # Embeddable widgets
+        │   └── widgets/    # Embeddable widgets (book, coderabbit, commandcode, ezoic, textream)
         ├── analytics.ts    # Analytics integration
+        ├── api-key.ts      # API key generation/validation (MCP)
+        ├── date.ts         # Date formatting helpers
+        ├── db-errors.ts    # Prisma error normalization
         ├── db.ts           # Prisma client singleton
+        ├── ezoic.ts        # Ezoic ad integration
+        ├── format.ts       # Number/text formatting helpers
+        ├── prompt-access.ts # Prompt visibility/access checks
         ├── rate-limit.ts   # Rate limiting utility
+        ├── similarity.ts   # Embedding similarity helpers
         ├── skill-files.ts  # Skill file handling
         ├── slug.ts         # Slug generation
         ├── urls.ts         # URL helpers
         ├── utils.ts        # cn() and misc utilities
         ├── variable-detection.ts # Prompt variable detection
-        └── webhook.ts      # Outbound webhook delivery
+        ├── webhook.ts      # Outbound webhook delivery
+        └── works-best-with.ts # "Works best with" model recommendations
 ```
+
+Tests live in `src/__tests__/`, mirroring source areas (e.g. `src/__tests__/api/`, `src/__tests__/hooks/`, `src/__tests__/components/`).
 
 ## API Routes (`src/app/api/`)
 
@@ -166,34 +195,43 @@ npm run book:pdf:all     # Generate all PDFs
 |-------|---------|
 | `auth/[...nextauth]` | NextAuth handler |
 | `auth/register` | User registration |
-| `prompts/route.ts` | List/create prompts |
-| `prompts/[id]/route.ts` | Get/update/delete prompt |
+| `prompts` | List/create prompts |
+| `prompts/[id]` | Get/update/delete a prompt |
+| `prompts/[id]/comments`, `.../comments/[commentId]`, `.../comments/[commentId]/vote`, `.../comments/[commentId]/flag` | Threaded comments + voting + flagging |
+| `prompts/[id]/changes`, `.../changes/[changeId]` | Change requests (community-proposed edits) |
+| `prompts/[id]/versions`, `.../versions/[versionId]`, `.../restore` | Version history + restore |
+| `prompts/[id]/connections`, `.../connections/[connectionId]` | Workflow connections between prompts |
+| `prompts/[id]/vote`, `.../pin`, `.../feature`, `.../unlist` | Voting, pinning, admin featuring/unlisting |
+| `prompts/[id]/examples`, `.../skill`, `.../raw`, `.../flow` | Media examples, skill file, raw content, workflow flow data |
 | `prompts/search` | Keyword + semantic search |
 | `prompts/translate` | AI translation of search queries |
-| `generate` | AI prompt generation |
+| `generate/sql` | AI prompt generation |
 | `improve-prompt` | AI prompt improvement |
-| `prompt-builder` | Prompt builder AI tools |
-| `search` | Global search |
-| `categories` | Category CRUD |
+| `prompt-builder/chat`, `prompt-builder/generate-example` | Prompt builder AI tools |
+| `search/ai` | Global AI-assisted search |
+| `categories`, `categories/[id]/subscribe` | Category CRUD + subscriptions |
 | `collection` | User collections |
 | `reports` | Prompt reports |
 | `upload` | File upload (to storage plugin) |
-| `media-generate` | AI media generation (images/video) |
-| `user` / `users` | User profile operations |
-| `admin/*` | Admin-only operations |
+| `media-generate`, `media-generate/status` | AI media generation (images/video) + job polling |
+| `user/api-key`, `user/notifications`, `user/profile` | Current user operations |
+| `users/search` | User search (mentions, collaborators) |
+| `admin/prompts`, `admin/categories`, `admin/tags`, `admin/users`, `admin/reports`, `admin/webhooks`, `admin/embeddings`, `admin/import-prompts`, `admin/related-prompts`, `admin/slugs` | Admin-only operations |
 | `leaderboard` | Leaderboard data |
 | `health` | Health check |
-| `cron` | Scheduled jobs (credit reset) |
-| `config` | Runtime config endpoint |
-| `book` | Book/guide API |
+| `cron/reset-credits` | Scheduled job (daily generation credit reset, protected by `CRON_SECRET`) |
+| `config/storage` | Runtime storage config endpoint |
+| `book/demo` | Book demo content API |
 
 ## Database Models (Prisma)
 
 Key models in `prisma/schema.prisma`:
 
 - **User** — auth, roles (ADMIN/USER), API keys, generation credits, MCP settings
+- **Account / Session / VerificationToken** — standard NextAuth.js adapter models
 - **Prompt** — title, content, type (TEXT/IMAGE/VIDEO/AUDIO/STRUCTURED/SKILL/TASTE), tags, category, versions, embedding, MCP configs, workflow links
 - **PromptVersion** — immutable version history
+- **PromptTag** — join table between `Prompt` and `Tag`
 - **ChangeRequest** — community-proposed edits (PENDING/APPROVED/REJECTED)
 - **Category** — hierarchical (parent/children), pinned, ordered
 - **Tag** — colored slug-based tags
@@ -204,11 +242,11 @@ Key models in `prisma/schema.prisma`:
 - **PromptReport** — spam/inappropriate reports
 - **Notification** — COMMENT / REPLY events
 - **PromptConnection** — ordered connections between prompts (workflows)
-- **UserPromptExample** — media examples submitted by users
+- **UserPromptExample** — media examples submitted by users (required media type: IMAGE/VIDEO/DOCUMENT)
 - **WebhookConfig** — outbound webhooks (PROMPT_CREATED/UPDATED/DELETED)
 - **CategorySubscription** — user subscriptions to categories
 
-Key enums: `UserRole` (ADMIN/USER), `PromptType` (TEXT/IMAGE/VIDEO/AUDIO/STRUCTURED/SKILL/TASTE), `ChangeRequestStatus` (PENDING/APPROVED/REJECTED), `ReportReason`/`ReportStatus`, `WebhookEvent`, `DelistReason` (TOO_SHORT/NOT_ENGLISH/LOW_QUALITY/NOT_LLM_INSTRUCTION/MANUAL/UNUSUAL_ACTIVITY)
+Key enums: `UserRole` (ADMIN/USER), `PromptType` (TEXT/IMAGE/VIDEO/AUDIO/STRUCTURED/SKILL/TASTE), `StructuredFormat` (JSON/YAML), `NotificationType` (COMMENT/REPLY), `ChangeRequestStatus` (PENDING/APPROVED/REJECTED), `RequiredMediaType` (IMAGE/VIDEO/DOCUMENT), `ReportReason` (SPAM/INAPPROPRIATE/COPYRIGHT/MISLEADING/RELIST_REQUEST/OTHER), `ReportStatus`, `WebhookEvent` (PROMPT_CREATED/PROMPT_UPDATED/PROMPT_DELETED), `DelistReason` (TOO_SHORT/NOT_ENGLISH/LOW_QUALITY/NOT_LLM_INSTRUCTION/MANUAL/UNUSUAL_ACTIVITY)
 
 ## Configuration (`prompts.config.ts`)
 
@@ -363,9 +401,12 @@ LOG_LEVEL=              # Options: trace, debug, info, warn, error, fatal (defau
 
 1. `npm run lint` — fix all ESLint errors
 2. `npx tsc --noEmit` — fix TypeScript errors
-3. Add translations to all `messages/*.json` for any new user-facing text
-4. Use existing `src/components/ui/` components; don't reinvent
-5. Never commit secrets (use `.env`, which is gitignored)
+3. `npm test` — run the Vitest suite (tests live in `src/__tests__/`)
+4. Add translations to all `messages/*.json` for any new user-facing text
+5. Use existing `src/components/ui/` components; don't reinvent
+6. Never commit secrets (use `.env`, which is gitignored)
+
+CI (`.github/workflows/ci.yml`) runs `npm run lint` and `npm test` on every push/PR to `main` — keep both green locally before pushing.
 
 ## Boundaries
 
